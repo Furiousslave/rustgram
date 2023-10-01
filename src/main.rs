@@ -1,37 +1,74 @@
-use std::io::Write;
+use std::io::{Stdout, Write};
 use grammers_client::{Client, Config, InitParams, SignInError};
 use grammers_session::Session;
 use console::{Term, style, Style};
 use grammers_mtsender::AuthorizationError;
-use crate::terminal_colors::GREEN;
+use std::io::{self, stdout};
+use std::process;
+use ratatui::{
+    backend::CrosstermBackend,
+    widgets::{Block, Borders},
+    Terminal,
+};
+use crossterm::{event::{self, Event, KeyCode}, ExecutableCommand};
+use ratatui::style::Stylize;
+use ratatui::widgets::Paragraph;
+use std::{thread, time::Duration};
+use anyhow::Result;
 
-mod terminal_colors;
-
-fn main() {
-    let term = Term::stdout();
-    let a = GREEN.apply_to("Connecting to Telegram...");
-    term.write_line(&*a.to_string()).unwrap_or_else(|error| eprintln!("Error: {}", error));
+mod telegram_integrations;
+mod terminal;
+mod ui;
 
 
-
-
-    // if let Err(error)= result {
-    //     !eprintln!("Error: {}", error)
-    // }
-    // println!("This is {} neat", style("quite").red());
+#[tokio::main]
+async fn main() {
+    if let Err(err) = try_main().await {
+        eprintln!("{}", err);
+        process::exit(2);
+    }
 }
 
-async fn async_main() -> Result<(), AuthorizationError> {
-    let client_config = Config {
-        session: Session::new(),
-        api_id: 22569658,
-        api_hash: "16a2120465917eff8ad394778bb8bfbf".to_string(),
-        // api_hash: "16a2120465917eff8ad394778bb8bfbfffff".to_string(), bad value
-        params: InitParams::default()
-    };
+async fn try_main() -> Result<()> {
+    let client = telegram_integrations::connect_to_telegram().await?;
+    terminal::setup_terminal()?;
+    let mut terminal = terminal::start_terminal(stdout())?;
 
-    let client = Client::connect(client_config).await?;
-
+    loop {
+        let should_quit = run_app(&mut terminal, &client).await?;
+        if should_quit {
+            terminal.clear()?; //todo should i clear the terminal like this?
+            break;
+        }
+    }
     Ok(())
-    // Ok();
 }
+
+async fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, client: &Client) -> Result<bool> {
+    ui::ui(terminal, client).await?;
+
+    if event::poll(Duration::from_millis(50))? {
+    if let Event::Key(key) = event::read()? {
+        if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
+            return Ok(true);
+        }
+    }
+}
+    Ok(false)
+}
+
+
+// terminal.draw(|f| {
+//     f.render_widget(Paragraph::new("Hello World!")
+//                         .block(Block::default().title("Greeting").borders(Borders::ALL)),
+//                     f.size(), );
+// })?;
+//
+// if event::poll(std::time::Duration::from_millis(50))? {
+//     if let Event::Key(key) = event::read()? {
+//         if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
+//             return Ok(true);
+//         }
+//     }
+// }
+
