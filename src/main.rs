@@ -14,16 +14,15 @@ use crossterm::{event::{self, Event, KeyCode}, ExecutableCommand};
 use ratatui::style::Stylize;
 use ratatui::widgets::Paragraph;
 use std::{thread, time::Duration};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crate::app::App;
-use crate::input_event_handler::handle_input_event;
 
-mod telegram_integrations;
 mod terminal;
 mod ui;
 mod app;
 mod input_event_handler;
 
+pub const SESSION_FILE: &str = "dialogs.session";
 
 #[tokio::main]
 async fn main() {
@@ -38,24 +37,44 @@ async fn try_main() -> Result<()> {
     let api_hash=  "16a2120465917eff8ad394778bb8bfbf".to_string();
 
 
-    let client = telegram_integrations::connect_to_telegram(api_id, api_hash.clone()).await?;
+    let client = Client::connect(Config {
+        session: Session::load_file_or_create(SESSION_FILE)?,
+        api_id,
+        api_hash: api_hash.clone(),
+        params: Default::default(),
+    }).await?;
     terminal::setup_terminal()?;
     let mut terminal = terminal::start_terminal(stdout())?;
     let mut app = App::new(api_id, api_hash, client.is_authorized().await?);
-    let test = &mut app;
 
     loop {
-        let should_quit = run_app(&mut terminal, &client, test).await?;
-        if should_quit {
-            terminal.clear()?; //todo should i clear the terminal like this?
-            break;
+        let app_mut_ref = &mut app;
+        let should_quit_result = run_app(&mut terminal, &client,  app_mut_ref).await;
+        match should_quit_result {
+            Ok(should_quit) => {
+                if should_quit {
+                    terminal.clear()?; //todo should i clear the terminal like this?
+                    break;
+                }
+            }
+            Err(err) => {
+                //todo мб ещё что-то мутить с терминалом
+                terminal.clear()?;
+                return Err(anyhow!(err))
+            }
         }
+        //
+        //
+        // if should_quit_result {
+        //     terminal.clear()?; //todo should i clear the terminal like this?
+        //     break;
+        // }
     }
     Ok(())
 }
 
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, client: &Client, app: & mut App<'_>) -> Result<bool> {
     ui::ui(terminal, app.get_application_stage())?;
-    handle_input_event(app, client).await
+    input_event_handler::handle_input_event(app, client).await
 }
 

@@ -1,8 +1,13 @@
-use grammers_client::types::LoginToken;
+use std::fs::OpenOptions;
+use std::ops::Deref;
+use anyhow::{anyhow, Error};
+use grammers_client::types::{LoginToken, PasswordToken};
+use grammers_tl_types::types::account::Password;
 use tui_textarea::TextArea;
 use ratatui::layout::Alignment;
 // use crate::app::ApplicationStage::{Authorization, Authorized};
-use crate::app::AuthorizationPhase::{EnteringCode, EnteringPhoneNumber};
+use crate::app::AuthorizationPhase::{EnteringCode, EnteringPassword, EnteringPhoneNumber};
+use anyhow::{Result, Context};
 
 pub struct App<'a> {
     telegram_api_id: i32,
@@ -14,22 +19,13 @@ pub struct App<'a> {
     application_stage: ApplicationStage<'a>,
     // authorization_phase: Option<AuthorizationPhase<'a>>,
     login_token: Option<LoginToken>,
+    password_token: Option<PasswordToken>
     // is_user_authorized: bool
 }
 
 
 impl<'a> App<'a> {
     pub fn new(telegram_api_id: i32, api_hash: String, is_user_authorized: bool) -> Self {
-        // let authorization_phase = match is_user_authorized {
-        //     true => None,
-        //     false => {
-        //         let mut phone_number_text_area = TextArea::default();
-        //         phone_number_text_area.set_placeholder_text("Enter your phone number (international format)");
-        //         phone_number_text_area.set_alignment(Alignment::Center);
-        //         Some(EnteringPhoneNumber(phone_number_text_area))
-        //     }
-        // };
-
         let application_stage = match is_user_authorized {
             true => ApplicationStage::Authorized,
             false => {
@@ -57,11 +53,11 @@ impl<'a> App<'a> {
             // code_text_area: None,
             application_stage,
             // authorization_phase,
-            login_token: None
+            login_token: None,
+            password_token: None
             // is_user_authorized
         }
     }
-
 
 
     // pub fn get_phone_number_text_area<'b>(&'b mut self) -> &mut Option<TextArea<'a>> {
@@ -73,41 +69,69 @@ impl<'a> App<'a> {
     // }
 
 
-
-
-
     pub fn get_application_stage(&mut self) -> &mut ApplicationStage<'a> {
         &mut self.application_stage
     }
 
+    pub fn get_application_stagee(&self) -> &ApplicationStage<'a> {
+        &self.application_stage
+    }
+
+    pub fn get_entered_phone_number(&self) -> Result<&str> {
+        match &self.application_stage {
+            ApplicationStage::Authorization(phase) => {
+                if let EnteringPhoneNumber(_) = phase {
+                    Ok(phase.get_content_from_text_area())
+                } else {
+                    Err(anyhow!("Application must be at entering phone number authorization phase"))
+                }
+            }
+            _ => Err(anyhow!("Application must be at Authorization stage"))
+        }
+    }
+
+    pub fn get_entered_code(&self) -> Result<&str> {
+        match &self.application_stage {
+            ApplicationStage::Authorization(phase) => {
+                if let EnteringCode(_) = phase {
+                    Ok(phase.get_content_from_text_area())
+                } else {
+                    Err(anyhow!("Application must be at entering code authorization phase"))
+                }
+            }
+            _ => Err(anyhow!("Application must be at Authorization stage"))
+        }
+    }
+
+    pub fn get_entered_password(&self) -> Result<&str> {
+        match &self.application_stage {
+            ApplicationStage::Authorization(phase) => {
+                if let EnteringPassword(_) = phase {
+                    Ok(phase.get_content_from_text_area())
+                } else {
+                    Err(anyhow!("Application must be at entering password authorization phase"))
+                }
+            }
+            _ => Err(anyhow!("Application must be at Authorization stage"))
+        }
+    }
 
     //todo Ранее делал так, разобраться в чём разница
     // pub fn get_application_stage(&mut self) -> &'a mut ApplicationStage {
     //     &mut self.application_stage
     // }
 
-    // pub fn get_authorization_phase(&self) -> &Option<AuthorizationPhase> {
-    //     &self.authorization_phase
-    // }
-
-
-
-    // pub fn set_application_stage(&mut self, application_stage: ApplicationStage) {
-    //     self.application_stage = application_stage
-    // }
 
     pub fn set_login_token(&mut self, login_token: LoginToken) {
         self.login_token = Some(login_token)
     }
-    pub fn telegram_api_id(&self) -> i32 {
-        self.telegram_api_id
-    }
+
+
     pub fn phone(&self) -> &str {
         &self.phone
     }
-    pub fn api_hash(&self) -> &str {
-        &self.api_hash
-    }
+
+
 
     pub fn change_authorization_phase_to_code_entering(&mut self) {
         let mut code_text_area = TextArea::default();
@@ -115,26 +139,60 @@ impl<'a> App<'a> {
         code_text_area.set_alignment(Alignment::Center);
         self.application_stage = ApplicationStage::Authorization(EnteringCode(code_text_area))
     }
-    // pub fn set_authorization_phase(&mut self, authorization_phase: Option<AuthorizationPhase>) {
-    //     self.authorization_phase = authorization_phase;
-    // }
 
-    // pub fn set_is_user_authorized(&mut self, is_user_authorized: bool) {
-    //     self.is_user_authorized = is_user_authorized;
-    // }
-    // pub fn is_user_authorized(&self) -> bool {
-    //     self.is_user_authorized
-    // }
+    pub fn change_authorization_phase_to_password_entering(&mut self, password_token: PasswordToken) {
+        let hint = password_token.hint().unwrap_or("None");
+        let mut password_text_area = TextArea::default();
+        password_text_area.set_placeholder_text(format!("Enter the password (hint {}): ", hint));
+        password_text_area.set_alignment(Alignment::Center);
+        self.application_stage = ApplicationStage::Authorization(EnteringPassword(password_text_area));
+        self.password_token = Some(password_token);
+    }
+
+    pub fn change_application_stage_to_authorized(&mut self, ) {
+        self.application_stage = ApplicationStage::Authorized
+    }
+
+    pub fn get_login_token(&self) -> Result<&LoginToken> {
+        match &self.login_token {
+            None => Err(anyhow!("Password token is missing")),
+            Some(token) => Ok(token)
+        }
+    }
+    pub fn get_password_token(&mut self) -> Result<PasswordToken> {
+        let next_val = std::mem::replace(&mut self.password_token, None);
+        match next_val {
+            None => Err(anyhow!("Password token is missing")),
+            Some(token) => Ok(token)
+        }
+    }
+    pub fn telegram_api_id(&self) -> i32 {
+        self.telegram_api_id
+    }
+    pub fn api_hash(&self) -> &str {
+        &self.api_hash
+    }
 }
 
-pub enum ApplicationStage<'a>{
+pub enum ApplicationStage<'a> {
     Authorization(AuthorizationPhase<'a>),
-    Authorized
+    Authorized,
 }
 
 pub enum AuthorizationPhase<'a> {
     EnteringPhoneNumber(TextArea<'a>),
-    EnteringCode(TextArea<'a>)
+    EnteringCode(TextArea<'a>),
+    EnteringPassword(TextArea<'a>),
+}
+
+impl AuthorizationPhase<'_> {
+    pub fn get_content_from_text_area(&self) -> &str {
+        match &self {
+            EnteringPhoneNumber(tex_area) => tex_area.lines()[0].as_str(),
+            EnteringCode(text_area) => text_area.lines()[0].as_str(),
+            EnteringPassword(text_area) => text_area.lines()[0].as_str()
+        }
+    }
 }
 
 
