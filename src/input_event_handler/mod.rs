@@ -4,6 +4,7 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crate::app::{App, ApplicationStage, AuthorizationPhase};
 use grammers_client::{Client, SignInError};
+use tokio::task;
 use tui_textarea::TextArea;
 use crate::SESSION_FILE;
 
@@ -32,20 +33,28 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                             } else if key.code == KeyCode::Enter && text_area.lines()[0].len() > 0 {
                                 let code = app.get_entered_code()?;
                                 let signed_in = client.sign_in(app.get_login_token()?, code).await;
-                                match signed_in {
+                                let should_return = match signed_in {
                                     Err(SignInError::PasswordRequired(password_token)) => {
                                         app.change_authorization_phase_to_password_entering(password_token);
-                                        Ok(())
+                                        Ok(true)
                                     }
 
                                     Err(e) => Err(anyhow!("An error occurred when trying to sign in: {}", e)),
-                                    _ => Ok(())
+                                    _ => Ok(false)
                                 }?;
+                                if should_return {
+                                    return Ok(false)
+                                }
+
                                 match client.session().save_to_file(SESSION_FILE) {
                                     Ok(_) => Ok(()),
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
                                 app.change_application_stage_to_authorized();
+                                // let client_handle = client.clone();
+                                // let network_handle = task::spawn(async move { client.run_until_disconnected().await });
+                                // app.set_client_handle(client_handle);
+                                // app.set_network_handle(network_handle);
                             }
                             Ok(handle_esc_to_close(&key))
                         }
@@ -55,12 +64,25 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                             } else if key.code == KeyCode::Enter && text_area.lines()[0].len() > 0 {
                                 let token = app.get_password_token()?;
                                 client.check_password(token, app.get_entered_password()?).await?;
+                                match client.session().save_to_file(SESSION_FILE) {
+                                    Ok(_) => Ok(()),
+                                    Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
+                                }?;
+                                app.change_application_stage_to_authorized();
                             }
                             Ok(handle_esc_to_close(&key))
                         }
                     }
                 }
                 ApplicationStage::Authorized => {
+                    // let mut dialogs = app.get_client_handle().iter_dialogs();
+                    //
+                    // println!("Showing up to {} dialogs:", dialogs.total().await?);
+                    // while let Some(dialog) = dialogs.next().await? {
+                    //     let chat = dialog.chat();
+                    //     println!("- {: >10} {}", chat.id(), chat.name());
+                    // }
+                    //
                     Ok(handle_esc_to_close(&key))
                 }
             };

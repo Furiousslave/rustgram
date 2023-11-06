@@ -8,6 +8,9 @@ use ratatui::layout::Alignment;
 // use crate::app::ApplicationStage::{Authorization, Authorized};
 use crate::app::AuthorizationPhase::{EnteringCode, EnteringPassword, EnteringPhoneNumber};
 use anyhow::{Result, Context};
+use grammers_client::Client;
+use grammers_mtsender::ReadError;
+use tokio::task::JoinHandle;
 
 pub struct App<'a> {
     telegram_api_id: i32,
@@ -19,7 +22,9 @@ pub struct App<'a> {
     application_stage: ApplicationStage<'a>,
     // authorization_phase: Option<AuthorizationPhase<'a>>,
     login_token: Option<LoginToken>,
-    password_token: Option<PasswordToken>
+    password_token: Option<PasswordToken>,
+    client_handle: Option<Client>,
+    network_handle: Option<JoinHandle<Result<(), ReadError>>>
     // is_user_authorized: bool
 }
 
@@ -54,8 +59,10 @@ impl<'a> App<'a> {
             application_stage,
             // authorization_phase,
             login_token: None,
-            password_token: None
-            // is_user_authorized
+            password_token: None,
+            client_handle: None,
+            network_handle: None
+            // is_user_authorized,
         }
     }
 
@@ -155,13 +162,13 @@ impl<'a> App<'a> {
 
     pub fn get_login_token(&self) -> Result<&LoginToken> {
         match &self.login_token {
-            None => Err(anyhow!("Password token is missing")),
+            None => Err(anyhow!("Login token is missing")),
             Some(token) => Ok(token)
         }
     }
     pub fn get_password_token(&mut self) -> Result<PasswordToken> {
-        let next_val = std::mem::replace(&mut self.password_token, None);
-        match next_val {
+        let option_password_token = std::mem::replace(&mut self.password_token, None);
+        match option_password_token {
             None => Err(anyhow!("Password token is missing")),
             Some(token) => Ok(token)
         }
@@ -172,6 +179,21 @@ impl<'a> App<'a> {
     pub fn api_hash(&self) -> &str {
         &self.api_hash
     }
+    //
+    // pub fn set_client_handle(&mut self, client_handle: Client) {
+    //     self.client_handle = Some(client_handle);
+    // }
+    //
+    // pub fn get_client_handle(&self) -> Result<&Client> {
+    //     match &self.client_handle {
+    //         None => Err(anyhow!("Client handle isn't obtained")),
+    //         Some(client) => Ok(client)
+    //     }
+    // }
+    //
+    // pub fn set_network_handle(&mut self, network_handle: JoinHandle<Result<(), ReadError>>) {
+    //     self.network_handle = Some(network_handle);
+    // }
 }
 
 pub enum ApplicationStage<'a> {
