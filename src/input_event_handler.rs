@@ -50,11 +50,11 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Ok(_) => Ok(()),
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
+
+
                                 app.change_application_stage_to_authorized();
-                                // let client_handle = client.clone();
-                                // let network_handle = task::spawn(async move { client.run_until_disconnected().await });
-                                // app.set_client_handle(client_handle);
-                                // app.set_network_handle(network_handle);
+                                let dialogs = client.iter_dialogs();
+
                             }
                             Ok(handle_esc_to_close(&key))
                         }
@@ -68,7 +68,10 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Ok(_) => Ok(()),
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
+
+
                                 app.change_application_stage_to_authorized();
+
                             }
                             Ok(handle_esc_to_close(&key))
                         }
