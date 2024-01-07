@@ -52,6 +52,7 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                 }?;
 
 
+
                                 app.change_application_stage_to_authorized();
                                 let dialogs = client.iter_dialogs();
 

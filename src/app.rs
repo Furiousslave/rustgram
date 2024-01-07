@@ -1,7 +1,7 @@
 use std::fs::OpenOptions;
 use std::ops::Deref;
 use anyhow::{anyhow, Error};
-use grammers_client::types::{LoginToken, PasswordToken};
+use grammers_client::types::{Chat, LoginToken, PasswordToken};
 use grammers_tl_types::types::account::Password;
 use tui_textarea::TextArea;
 use ratatui::layout::Alignment;
@@ -16,21 +16,17 @@ pub struct App<'a> {
     telegram_api_id: i32,
     phone: String,
     api_hash: String,
-    is_authorized: bool,
-    // phone_number_text_area: Option<TextArea<'a>>, //todo Должны инициализироваться только когда нужны и после удаляться
-    // code_text_area: Option<TextArea<'a>>,
     application_stage: ApplicationStage<'a>,
-    // authorization_phase: Option<AuthorizationPhase<'a>>,
     login_token: Option<LoginToken>,
     password_token: Option<PasswordToken>,
     client_handle: Option<Client>,
-    network_handle: Option<JoinHandle<Result<(), ReadError>>>
-    // is_user_authorized: bool
+    network_handle: Option<JoinHandle<Result<(), ReadError>>>,
+    chats: Vec<Chat>
 }
 
 
 impl<'a> App<'a> {
-    pub fn new(telegram_api_id: i32, api_hash: String, is_user_authorized: bool) -> Self {
+    pub fn new(telegram_api_id: i32, api_hash: String, is_user_authorized: bool, chats: Vec<Chat>) -> Self {
         let application_stage = match is_user_authorized {
             true => ApplicationStage::Authorized,
             false => {
@@ -41,40 +37,18 @@ impl<'a> App<'a> {
             }
         };
 
-        //todo реализовать инициализацию нужных полей в зависимости от фазы авторизации
-
-
-        //
-        // let mut code_text_area = TextArea::default();
-        // code_text_area.set_placeholder_text("Enter the code you received");
-        // code_text_area.set_alignment(Alignment::Center);
-
         Self {
             telegram_api_id,
             phone: String::default(),
             api_hash,
-            is_authorized: false,
-            // phone_number_text_area,
-            // code_text_area: None,
             application_stage,
-            // authorization_phase,
             login_token: None,
             password_token: None,
             client_handle: None,
-            network_handle: None
-            // is_user_authorized,
+            network_handle: None,
+            chats
         }
     }
-
-
-    // pub fn get_phone_number_text_area<'b>(&'b mut self) -> &mut Option<TextArea<'a>> {
-    //     &mut self.phone_number_text_area
-    // }
-    //
-    // pub fn get_code_text_area<'b>(&'b mut self) -> &mut Option<TextArea<'a>> {
-    //     &mut self.code_text_area
-    // }
-
 
     pub fn get_application_stage(&mut self) -> &mut ApplicationStage<'a> {
         &mut self.application_stage
@@ -138,8 +112,6 @@ impl<'a> App<'a> {
         &self.phone
     }
 
-
-
     pub fn change_authorization_phase_to_code_entering(&mut self) {
         let mut code_text_area = TextArea::default();
         code_text_area.set_placeholder_text("Enter the code you received");
@@ -179,21 +151,10 @@ impl<'a> App<'a> {
     pub fn api_hash(&self) -> &str {
         &self.api_hash
     }
-    //
-    // pub fn set_client_handle(&mut self, client_handle: Client) {
-    //     self.client_handle = Some(client_handle);
-    // }
-    //
-    // pub fn get_client_handle(&self) -> Result<&Client> {
-    //     match &self.client_handle {
-    //         None => Err(anyhow!("Client handle isn't obtained")),
-    //         Some(client) => Ok(client)
-    //     }
-    // }
-    //
-    // pub fn set_network_handle(&mut self, network_handle: JoinHandle<Result<(), ReadError>>) {
-    //     self.network_handle = Some(network_handle);
-    // }
+
+    pub fn chats(&self) -> &Vec<Chat> {
+        &self.chats
+    }
 }
 
 pub enum ApplicationStage<'a> {

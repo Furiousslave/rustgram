@@ -14,7 +14,9 @@ use crossterm::{event::{self, Event, KeyCode}, ExecutableCommand};
 use ratatui::style::Stylize;
 use ratatui::widgets::Paragraph;
 use std::{thread, time::Duration};
+use std::sync::mpsc;
 use anyhow::{anyhow, Result};
+use grammers_client::types::Chat;
 use crate::app::{App, ApplicationStage};
 
 mod terminal;
@@ -43,7 +45,21 @@ async fn try_main() -> Result<()> {
     }).await?;
     terminal::setup_terminal()?;
     let mut terminal = terminal::start_terminal(stdout())?;
-    let mut app = App::new(api_id, api_hash, client.is_authorized().await?);
+    let is_authorized = client.is_authorized().await?;
+    let chats: Vec<Chat> = if is_authorized {
+        let mut chats = Vec::new();
+        let mut dialogs = client.iter_dialogs();
+        while let Some(dialog) = dialogs.next().await? {
+            chats.push(dialog.chat().clone());
+        }
+        chats
+    } else {
+        Vec::new()
+    };
+
+    let mut app = App::new(api_id, api_hash, is_authorized, chats);
+    // let (tx, mut rx) = mpsc::channel::<String>();
+    // let mut async_update_started = false;
     loop {
         let app_mut_ref = &mut app;
         let should_quit_result = run_app(&mut terminal, &client,  app_mut_ref).await;
@@ -63,6 +79,18 @@ async fn try_main() -> Result<()> {
                 return Err(anyhow!(err))
             }
         }
+
+        // if let ApplicationStage::Authorized = app.get_application_stagee() {
+        //     if !async_update_started {
+        //         async_update_started = true;
+        //         tokio::spawn(async move {
+        //
+        //
+        //             tx.send()
+        //
+        //         });
+        //     }
+        // }
         //
         //
         // if should_quit_result {
@@ -70,11 +98,12 @@ async fn try_main() -> Result<()> {
         //     break;
         // }
     }
+
     Ok(())
 }
 
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, client: &Client, app: & mut App<'_>) -> Result<bool> {
-    ui::ui(terminal, app.get_application_stage())?;
+    ui::ui(terminal, app)?;
     // if let ApplicationStage::Authorized = app.get_application_stagee() {
     //     //todo handle updates in async way
     //     println!("123")
