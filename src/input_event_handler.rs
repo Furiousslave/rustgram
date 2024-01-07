@@ -51,16 +51,12 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
 
-
-
                                 app.change_application_stage_to_authorized();
-                                let dialogs = client.iter_dialogs();
-
                             }
                             Ok(handle_esc_to_close(&key))
                         }
                         AuthorizationPhase::EnteringPassword(ref mut text_area) => {
-                            if is_key_event_press(&key) {
+                            if is_key_event_press(&key) && key.code != KeyCode::Enter {
                                 text_area.input(key);
                             } else if key.code == KeyCode::Enter && text_area.lines()[0].len() > 0 {
                                 let token = app.get_password_token()?;
@@ -69,10 +65,7 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Ok(_) => Ok(()),
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
-
-
                                 app.change_application_stage_to_authorized();
-
                             }
                             Ok(handle_esc_to_close(&key))
                         }

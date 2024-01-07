@@ -11,9 +11,12 @@ use grammers_client::Client;
 use grammers_client::types::Chat;
 use qrcode::EcLevel::L;
 use ratatui::widgets::{List, ListItem};
+use regex::Regex;
 // use ratatui::style::{self, Color};
 use tui_textarea::TextArea;
+use unicode_segmentation::UnicodeSegmentation;
 use crate::app::{App, ApplicationStage, AuthorizationPhase};
+
 
 pub fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) -> Result<()> {
     terminal.draw(|frame| {
@@ -95,10 +98,11 @@ fn draw_chats(frame: &mut Frame<CrosstermBackend<Stdout>>, layout: Rect, chats: 
                 Chat::Group(group) => "👥 ".to_owned() + group.title(),
                 Chat::Channel(channel) =>"📢 ".to_owned() + channel.title()
             };
-            ListItem::new(Line::from(name))
+            ListItem::new(Line::from(remove_emojis(chat.name())))
         }
         ).collect();
     let chats_list = List::new(list_items)
+        .style(Style::default().bg(Color::Yellow))
         .highlight_symbol(highlight_symbol);
     let chats_list_layout = Layout::default()
         .margin(1)
@@ -107,4 +111,9 @@ fn draw_chats(frame: &mut Frame<CrosstermBackend<Stdout>>, layout: Rect, chats: 
         .direction(Direction::Vertical)
         .split(layout);
     frame.render_widget(chats_list, chats_list_layout[0]);
+}
+
+fn remove_emojis(input_str: &str) -> String {
+    let emoji_pattern = Regex::new(r"\p{Emoji}").unwrap();
+    emoji_pattern.replace_all(input_str, "").to_string()
 }
