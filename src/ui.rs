@@ -9,17 +9,11 @@ use ratatui::widgets::block::{Position, Title};
 use ratatui::{prelude::*, widgets::*};
 use grammers_client::Client;
 use grammers_client::types::Chat;
-use qrcode::EcLevel::L;
 use ratatui::widgets::{List, ListItem};
-use regex::Regex;
 // use ratatui::style::{self, Color};
 use tui_textarea::TextArea;
 use unicode_segmentation::UnicodeSegmentation;
 use crate::app::{App, ApplicationStage, AuthorizationPhase};
-use terminal_emoji::Emoji;
-use terminal_supports_emoji::{supports_emoji, Stream};
-use demoji::demoji;
-use demoji_rs::remove_emoji;
 use ratatui::layout::Alignment::Center;
 
 const MAIN_FRAME_TITLE: &str = "Rustgram🦀";
