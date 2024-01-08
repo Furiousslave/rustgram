@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-qrcode = "0.12.0"
 console = "0.15.7"
 grammers-client = "0.4.0"
 grammers-session = "0.4.0"
@@ -18,11 +17,3 @@ crossterm = "0.27"
 anyhow = "1.0.75"
 tui-textarea = { version = "0.4.0", features = ["crossterm"], default-features = false}
 unicode-segmentation = "1.8.0"
-regex = "1.5"
-terminal-emoji = "0.4.1"
-terminal-supports-emoji = "0.1.3"
-demoji = "0.0.3"
-demoji-rs = "0.1.0"
-#termion = "3.0.0"
-rand = "0.8.5"
-unicode-width = "0.1.11"
