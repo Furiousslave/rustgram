@@ -21,6 +21,7 @@ const MESSAGES_FRAME_TITLE: &str = "Messages";
 const CHATS_FRAME_TITLE: &str = "Chats";
 const SELECTED_CHAT_HIGHLIGHT_SYMBOL: &str = ">>";
 const USER_CHAT_TYPE_EMOJI: &str = "👤";
+const BOT_CHAT_TYPE_EMOJI: &str = "🤖";
 const GROUP_CHAT_TYPE_EMOJI: &str = "👥";
 const CHANNEL_CHAT_TYPE_EMOJI: &str = "📢";
 
@@ -90,11 +91,14 @@ fn draw_chats(frame: &mut Frame, layout: Rect, chats: &Vec<Chat>) {
     frame.render_widget(chats_block, layout);
     let list_items: Vec<ListItem> = chats.iter()
         .map(|chat| {
-            //🤖 <- bot emoji
             let name = match chat {
                 Chat::User(user) => {
                     let name_without_emojis = remove_emoji_graphemes(user.first_name());
-                    format!("{USER_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                    if user.is_bot() {
+                        format!("{BOT_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                    } else {
+                        format!("{USER_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                    }
                 },
                 Chat::Group(group) => {
                     let name_without_emojis = remove_emoji_graphemes(group.title());
