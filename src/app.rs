@@ -4,12 +4,13 @@ use anyhow::{anyhow, Error};
 use grammers_client::types::{Chat, LoginToken, PasswordToken};
 use grammers_tl_types::types::account::Password;
 use tui_textarea::TextArea;
-use ratatui::layout::Alignment;
 // use crate::app::ApplicationStage::{Authorization, Authorized};
 use crate::app::AuthorizationPhase::{EnteringCode, EnteringPassword, EnteringPhoneNumber};
 use anyhow::{Result, Context};
 use grammers_client::Client;
 use grammers_mtsender::ReadError;
+use ratatui::layout::Alignment;
+use ratatui::layout::Alignment::Center;
 use tokio::task::JoinHandle;
 
 pub struct App<'a> {
@@ -32,7 +33,7 @@ impl<'a> App<'a> {
             false => {
                 let mut phone_number_text_area = TextArea::default();
                 phone_number_text_area.set_placeholder_text("Enter your phone number (international format)");
-                phone_number_text_area.set_alignment(Alignment::Center);
+                phone_number_text_area.set_alignment(Center);
                 ApplicationStage::Authorization(EnteringPhoneNumber(phone_number_text_area))
             }
         };

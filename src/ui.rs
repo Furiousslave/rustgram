@@ -16,7 +16,19 @@ use regex::Regex;
 use tui_textarea::TextArea;
 use unicode_segmentation::UnicodeSegmentation;
 use crate::app::{App, ApplicationStage, AuthorizationPhase};
+use terminal_emoji::Emoji;
+use terminal_supports_emoji::{supports_emoji, Stream};
+use demoji::demoji;
+use demoji_rs::remove_emoji;
+use ratatui::layout::Alignment::Center;
 
+const MAIN_FRAME_TITLE: &str = "Rustgram🦀";
+const MESSAGES_FRAME_TITLE: &str = "Messages";
+const CHATS_FRAME_TITLE: &str = "Chats";
+const SELECTED_CHAT_HIGHLIGHT_SYMBOL: &str = ">>";
+const USER_CHAT_TYPE_EMOJI: &str = "👤";
+const GROUP_CHAT_TYPE_EMOJI: &str = "👥";
+const CHANNEL_CHAT_TYPE_EMOJI: &str = "📢";
 
 pub fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) -> Result<()> {
     terminal.draw(|frame| {
@@ -31,7 +43,7 @@ pub fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) -> Resul
     Ok(())
 }
 
-fn draw_main_layout(frame: &mut Frame<CrosstermBackend<Stdout>>) -> Rc<[Rect]> {
+fn draw_main_layout(frame: &mut Frame) -> Rc<[Rect]> {
     let main_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(vec![
@@ -39,16 +51,15 @@ fn draw_main_layout(frame: &mut Frame<CrosstermBackend<Stdout>>) -> Rc<[Rect]> {
         ])
         .split(frame.size());
     let main_block = Block::default()
-        .style(Style::default().bg(Color::Black))
         .borders(Borders::ALL)
-        .title(Title::from("Rustgram")
-            .alignment(Alignment::Center)
+        .title(Title::from(MAIN_FRAME_TITLE)
+            .alignment(Center)
         );
     frame.render_widget(main_block, main_layout[0]);
     main_layout
 }
 
-fn draw_authorization_layout(frame: &mut Frame<CrosstermBackend<Stdout>>, main_layout: &Rc<[Rect]>, authorization_phase: &AuthorizationPhase) {
+fn draw_authorization_layout(frame: &mut Frame, main_layout: &Rc<[Rect]>, authorization_phase: &AuthorizationPhase) {
     let vertical_margin = (main_layout[0].height as f64 * 0.25).round() as u16;
     let horizontal_margin = (main_layout[0].width as f64 * 0.25).round() as u16;
     let layout = Layout::default()
@@ -65,55 +76,58 @@ fn draw_authorization_layout(frame: &mut Frame<CrosstermBackend<Stdout>>, main_l
     frame.render_widget(widget_to_render, layout[0]);
 }
 
-fn draw_authorized_layout(frame: &mut Frame<CrosstermBackend<Stdout>>, main_layout: &Rc<[Rect]>, chats: &Vec<Chat>) {
+fn draw_authorized_layout(frame: &mut Frame, main_layout: &Rc<[Rect]>, chats: &Vec<Chat>) {
     let layouts = Layout::default()
         .margin(1)
         .direction(Direction::Horizontal)
         .constraints(vec![Percentage(30), Percentage(70)])
         .split(main_layout[0]);
     let messages_block = Block::default()
-        .style(Style::default().bg(Color::Black))
         .borders(Borders::ALL)
-        .title(Title::from("Messages")
-            .alignment(Alignment::Center)
-        );
+        .title(Title::from(MESSAGES_FRAME_TITLE).alignment(Center));
     draw_chats(frame, layouts[0], chats);
     frame.render_widget(messages_block, layouts[1]);
 }
 
-fn draw_chats(frame: &mut Frame<CrosstermBackend<Stdout>>, layout: Rect, chats: &Vec<Chat>) {
+fn draw_chats(frame: &mut Frame, layout: Rect, chats: &Vec<Chat>) {
     let chats_block = Block::default()
-        .style(Style::default().bg(Color::Black))
         .borders(Borders::ALL)
-        .title(Title::from("Chats")
-            .alignment(Alignment::Center)
-        );
+        .title(Title::from(CHATS_FRAME_TITLE).alignment(Center));
     frame.render_widget(chats_block, layout);
-    let highlight_symbol = ">>";
     let list_items: Vec<ListItem> = chats.iter()
         .map(|chat| {
             //🤖 <- bot emoji
             let name = match chat {
-                Chat::User(user) => "👤 ".to_owned() + user.first_name(),
-                Chat::Group(group) => "👥 ".to_owned() + group.title(),
-                Chat::Channel(channel) =>"📢 ".to_owned() + channel.title()
+                Chat::User(user) => {
+                    let name_without_emojis = remove_emoji_graphemes(user.first_name());
+                    format!("{USER_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                },
+                Chat::Group(group) => {
+                    let name_without_emojis = remove_emoji_graphemes(group.title());
+                    format!("{GROUP_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                },
+                Chat::Channel(channel) => {
+                    let name_without_emojis = remove_emoji_graphemes(channel.title());
+                    format!("{CHANNEL_CHAT_TYPE_EMOJI} {name_without_emojis}")
+                }
             };
-            ListItem::new(Line::from(remove_emojis(chat.name())))
+            ListItem::new(Line::from(name))
         }
         ).collect();
     let chats_list = List::new(list_items)
-        .style(Style::default().bg(Color::Yellow))
-        .highlight_symbol(highlight_symbol);
+        .highlight_symbol(SELECTED_CHAT_HIGHLIGHT_SYMBOL);
     let chats_list_layout = Layout::default()
         .margin(1)
-        // .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .constraints(vec![Percentage(100)])
+        .constraints(vec![Constraint::Min(0)])
         .direction(Direction::Vertical)
         .split(layout);
     frame.render_widget(chats_list, chats_list_layout[0]);
 }
 
-fn remove_emojis(input_str: &str) -> String {
-    let emoji_pattern = Regex::new(r"\p{Emoji}").unwrap();
-    emoji_pattern.replace_all(input_str, "").to_string()
+fn remove_emoji_graphemes(input_str: &str) -> String {
+    input_str.graphemes(true)
+        .filter(|g| g.len() == 1 || g.len() == 2)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
