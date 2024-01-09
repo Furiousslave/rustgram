@@ -1,28 +1,26 @@
 use std::io::{Stdout, Write};
-use grammers_client::{Client, Config, InitParams, SignInError};
-use grammers_session::Session;
-use console::{Term, style, Style};
-use grammers_mtsender::AuthorizationError;
-use std::io::{self, stdout};
+use std::io::stdout;
 use std::process;
+
+use anyhow::{anyhow, Result};
+use crossterm::ExecutableCommand;
+use grammers_client::{Client, Config};
+use grammers_client::types::Chat;
+use grammers_session::Session;
 use ratatui::{
-    backend::CrosstermBackend,
-    widgets::{Block, Borders},
+    backend::CrosstermBackend
+    ,
     Terminal,
 };
-use crossterm::{event::{self, Event, KeyCode}, ExecutableCommand};
 use ratatui::style::Stylize;
-use ratatui::widgets::Paragraph;
-use std::{thread, time::Duration};
-use std::sync::mpsc;
-use anyhow::{anyhow, Result};
-use grammers_client::types::Chat;
-use crate::app::{App, ApplicationStage};
+
+use crate::app::App;
 
 mod terminal;
 mod ui;
 mod app;
 mod input_event_handler;
+mod utils;
 
 pub const SESSION_FILE: &str = "dialogs.session";
 
@@ -57,7 +55,11 @@ async fn try_main() -> Result<()> {
         Vec::new()
     };
 
-    let mut app = App::new(api_id, api_hash, is_authorized, chats);
+    let mut app = if is_authorized {
+        App::new_authorized(api_id, api_hash, utils::get_chats(&client).await?)
+    } else {
+        App::new_unauthorized(api_id, api_hash)
+    };
     // let (tx, mut rx) = mpsc::channel::<String>();
     // let mut async_update_started = false;
     loop {
@@ -66,10 +68,10 @@ async fn try_main() -> Result<()> {
         match should_quit_result {
             Ok(should_quit) => {
                 if should_quit {
-                    drop(client);
-                    drop(app);
+                    // drop(client);
+                    // drop(app);
                     terminal.clear()?; //todo should i clear the terminal like this?
-                    drop(terminal);
+                    // drop(terminal);
                     break;
                 }
             }

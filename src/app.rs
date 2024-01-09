@@ -1,17 +1,17 @@
-use std::fs::OpenOptions;
-use std::ops::Deref;
-use anyhow::{anyhow, Error};
-use grammers_client::types::{Chat, LoginToken, PasswordToken};
-use grammers_tl_types::types::account::Password;
-use tui_textarea::TextArea;
-// use crate::app::ApplicationStage::{Authorization, Authorized};
-use crate::app::AuthorizationPhase::{EnteringCode, EnteringPassword, EnteringPhoneNumber};
-use anyhow::{Result, Context};
+use anyhow::anyhow;
+use anyhow::Result;
 use grammers_client::Client;
+use grammers_client::types::{Chat, LoginToken, PasswordToken};
 use grammers_mtsender::ReadError;
-use ratatui::layout::Alignment;
 use ratatui::layout::Alignment::Center;
 use tokio::task::JoinHandle;
+use tui_textarea::TextArea;
+
+use ActiveMessagingTab::Chats;
+
+use crate::app::ApplicationStage::{Authorization, Authorized};
+// use crate::app::ApplicationStage::{Authorization, Authorized};
+use crate::app::AuthorizationPhase::{EnteringCode, EnteringPassword, EnteringPhoneNumber};
 
 pub struct App<'a> {
     telegram_api_id: i32,
@@ -22,32 +22,36 @@ pub struct App<'a> {
     password_token: Option<PasswordToken>,
     client_handle: Option<Client>,
     network_handle: Option<JoinHandle<Result<(), ReadError>>>,
-    chats: Vec<Chat>
 }
 
-
 impl<'a> App<'a> {
-    pub fn new(telegram_api_id: i32, api_hash: String, is_user_authorized: bool, chats: Vec<Chat>) -> Self {
-        let application_stage = match is_user_authorized {
-            true => ApplicationStage::Authorized,
-            false => {
-                let mut phone_number_text_area = TextArea::default();
-                phone_number_text_area.set_placeholder_text("Enter your phone number (international format)");
-                phone_number_text_area.set_alignment(Center);
-                ApplicationStage::Authorization(EnteringPhoneNumber(phone_number_text_area))
-            }
-        };
+    pub fn new_authorized(telegram_api_id: i32, api_hash: String, chats: Vec<Chat>) -> Self {
+        Self {
+            telegram_api_id,
+            phone: String::default(),
+            api_hash,
+            application_stage: Authorized(AuthorizedState::new(chats)),
+            login_token: None,
+            password_token: None,
+            client_handle: None,
+            network_handle: None,
+        }
+    }
+
+    pub fn new_unauthorized(telegram_api_id: i32, api_hash: String) -> Self {
+        let mut phone_number_text_area = TextArea::default();
+        phone_number_text_area.set_placeholder_text("Enter your phone number (international format)");
+        phone_number_text_area.set_alignment(Center);
 
         Self {
             telegram_api_id,
             phone: String::default(),
             api_hash,
-            application_stage,
+            application_stage: Authorization(EnteringPhoneNumber(phone_number_text_area)),
             login_token: None,
             password_token: None,
             client_handle: None,
             network_handle: None,
-            chats
         }
     }
 
@@ -61,7 +65,7 @@ impl<'a> App<'a> {
 
     pub fn get_entered_phone_number(&self) -> Result<&str> {
         match &self.application_stage {
-            ApplicationStage::Authorization(phase) => {
+            Authorization(phase) => {
                 if let EnteringPhoneNumber(_) = phase {
                     Ok(phase.get_content_from_text_area())
                 } else {
@@ -74,7 +78,7 @@ impl<'a> App<'a> {
 
     pub fn get_entered_code(&self) -> Result<&str> {
         match &self.application_stage {
-            ApplicationStage::Authorization(phase) => {
+            Authorization(phase) => {
                 if let EnteringCode(_) = phase {
                     Ok(phase.get_content_from_text_area())
                 } else {
@@ -87,7 +91,7 @@ impl<'a> App<'a> {
 
     pub fn get_entered_password(&self) -> Result<&str> {
         match &self.application_stage {
-            ApplicationStage::Authorization(phase) => {
+            Authorization(phase) => {
                 if let EnteringPassword(_) = phase {
                     Ok(phase.get_content_from_text_area())
                 } else {
@@ -116,21 +120,22 @@ impl<'a> App<'a> {
     pub fn change_authorization_phase_to_code_entering(&mut self) {
         let mut code_text_area = TextArea::default();
         code_text_area.set_placeholder_text("Enter the code you received");
-        code_text_area.set_alignment(Alignment::Center);
-        self.application_stage = ApplicationStage::Authorization(EnteringCode(code_text_area))
+        code_text_area.set_alignment(Center);
+        self.application_stage = Authorization(EnteringCode(code_text_area))
     }
 
     pub fn change_authorization_phase_to_password_entering(&mut self, password_token: PasswordToken) {
         let hint = password_token.hint().unwrap_or("None");
         let mut password_text_area = TextArea::default();
         password_text_area.set_placeholder_text(format!("Enter the password (hint {}): ", hint));
-        password_text_area.set_alignment(Alignment::Center);
-        self.application_stage = ApplicationStage::Authorization(EnteringPassword(password_text_area));
+        password_text_area.set_alignment(Center);
+        self.application_stage = Authorization(EnteringPassword(password_text_area));
         self.password_token = Some(password_token);
     }
 
-    pub fn change_application_stage_to_authorized(&mut self, ) {
-        self.application_stage = ApplicationStage::Authorized
+    pub fn change_application_stage_to_authorized(&mut self, chats: Vec<Chat>) {
+        let authorized_state = AuthorizedState::new(chats);
+        self.application_stage = Authorized(authorized_state)
     }
 
     pub fn get_login_token(&self) -> Result<&LoginToken> {
@@ -152,15 +157,11 @@ impl<'a> App<'a> {
     pub fn api_hash(&self) -> &str {
         &self.api_hash
     }
-
-    pub fn chats(&self) -> &Vec<Chat> {
-        &self.chats
-    }
 }
 
 pub enum ApplicationStage<'a> {
     Authorization(AuthorizationPhase<'a>),
-    Authorized,
+    Authorized(AuthorizedState),
 }
 
 pub enum AuthorizationPhase<'a> {
@@ -177,6 +178,46 @@ impl AuthorizationPhase<'_> {
             EnteringPassword(text_area) => text_area.lines()[0].as_str()
         }
     }
+}
+
+pub struct AuthorizedState {
+    selected_chat_index: usize,
+    chats: Vec<Chat>,
+    active_messaging_tab: ActiveMessagingTab
+}
+
+impl AuthorizedState {
+    pub fn new(chats: Vec<Chat>) -> Self {
+        Self {
+            selected_chat_index: 0,
+            chats,
+            active_messaging_tab: Chats
+        }
+    }
+
+    pub fn chats(&self) -> &Vec<Chat> {
+        &self.chats
+    }
+    pub fn selected_chat_index(&self) -> usize {
+        self.selected_chat_index
+    }
+
+    pub fn active_messaging_tab(&self) -> &ActiveMessagingTab {
+        &self.active_messaging_tab
+    }
+
+    pub fn set_selected_chat_index(&mut self, selected_chat_index: usize) {
+        self.selected_chat_index = selected_chat_index;
+    }
+
+    pub fn number_of_chats(&self) -> usize {
+        self.chats.len()
+    }
+}
+
+pub enum ActiveMessagingTab {
+    Chats,
+    Messages
 }
 
 

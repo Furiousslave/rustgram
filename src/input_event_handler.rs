@@ -1,12 +1,14 @@
 use std::time::Duration;
+
 use anyhow::{anyhow, Result};
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use crate::app::{App, ApplicationStage, AuthorizationPhase};
+use crossterm::event::KeyCode::{Down, Enter, Up};
 use grammers_client::{Client, SignInError};
-use tokio::task;
 use tui_textarea::TextArea;
-use crate::SESSION_FILE;
+
+use crate::{SESSION_FILE, utils};
+use crate::app::{ActiveMessagingTab, App, ApplicationStage, AuthorizationPhase};
 
 pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bool> {
     if event::poll(Duration::from_millis(50))? {
@@ -51,7 +53,7 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
 
-                                app.change_application_stage_to_authorized();
+                                app.change_application_stage_to_authorized(utils::get_chats(client).await?);
                             }
                             Ok(handle_esc_to_close(&key))
                         }
@@ -65,13 +67,33 @@ pub async fn handle_input_event(app: &mut App<'_>, client: &Client) -> Result<bo
                                     Ok(_) => Ok(()),
                                     Err(e) => Err(anyhow!("An error occurred while saving the session to a file: {}", e))
                                 }?;
-                                app.change_application_stage_to_authorized();
+                                app.change_application_stage_to_authorized(utils::get_chats(client).await?);
                             }
                             Ok(handle_esc_to_close(&key))
                         }
                     }
                 }
-                ApplicationStage::Authorized => {
+                ApplicationStage::Authorized(state) => {
+                    match state.active_messaging_tab() {
+                        ActiveMessagingTab::Chats => {
+                            let selected_chat_index = state.selected_chat_index();
+                            let number_of_chats = state.number_of_chats();
+                            if is_key_event_press(&key) {
+                                if key.code == Up {
+                                    if selected_chat_index > 0 {
+                                        state.set_selected_chat_index(selected_chat_index.saturating_sub(1))
+                                    }
+                                } else if key.code == Down {
+                                    if selected_chat_index < number_of_chats.saturating_sub(1) {
+                                        state.set_selected_chat_index(selected_chat_index.saturating_add(1))
+                                    }
+                                } else if key.code == Enter {
+                                    //todo load messages of chat
+                                }
+                            }
+                        }
+                        ActiveMessagingTab::Messages => {}
+                    }
                     // let mut dialogs = app.get_client_handle().iter_dialogs();
                     //
                     // println!("Showing up to {} dialogs:", dialogs.total().await?);
